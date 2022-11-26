@@ -1,0 +1,174 @@
+<!DOCTYPE html -->
+<!-- From: https://docs.geoserver.org/latest/en/user/extensions/vectortiles/tutorial.html -->
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Vector tiles</title>
+<script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.5.0/build/ol.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.5.0/css/ol.css">
+  <style>
+    html, body {
+      font-family: sans-serif;
+      width: 100%;
+    }
+    .map {
+      height: 800px;
+      width: 100%;
+      position: relative;
+    }
+    #info {
+        z-index: 1;
+        opacity: 0.5;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        margin: 0;
+        background: rgba(0,60,136,0.7);
+        color: white;
+        border: 0;
+        transition: opacity 100ms ease-in;
+    }
+  </style>
+</head>
+<body>
+  <h3>Mapbox Protobuf - vector tiles, OpenLayers</h3>
+  <div id="map" class="map">
+    <p id="info"/>
+  </div>
+
+  <script>
+
+  var style_simple = new ol.style.Style({
+      image: new ol.style.Circle({
+        radius: 7,
+        fill: new ol.style.Fill({color: 'black'}),
+        stroke: new ol.style.Stroke({
+          color: [255,0,0], width: 2
+        })
+      })
+  });
+
+
+  var style_selected = new ol.style.Style({
+      image: new ol.style.Circle({
+        radius: 9,
+        fill: new ol.style.Fill({color: 'grey'}),
+        stroke: new ol.style.Stroke({
+          color: [255,255,0], width: 3
+        })
+      })
+  });
+
+ /* function simpleStyle(feature) {
+    return style_simple;
+  }
+
+  function selectedStyle(feature) {
+    return style_selected;
+  }
+*/
+
+  var geoserver_layer_name = 'twitter-trekking:twitter_points';
+  var projection_epsg_no = '900913' // '3857'; //'4326';
+  
+  var map_data_layer = new ol.layer.VectorTile({
+        style:style_simple,
+        source: new ol.source.VectorTile({
+          tilePixelRatio: 1, // oversampling when > 1
+          tileGrid: ol.tilegrid.createXYZ({maxZoom: 19}),
+          format: new ol.format.MVT(),
+          url: 'http://docker.ilab.sztaki.hu:49158/geoserver/gwc/service/tms/1.0.0/' +
+            geoserver_layer_name + '@EPSG%3A' + projection_epsg_no +
+            '@pbf/{z}/{x}/{-y}.pbf'
+        })
+      });
+
+  // - see: 
+  // https://openlayers.org/en/latest/examples/vector-tile-info.html
+  // + ...? :
+  // https://openlayers.org/en/latest/examples/popup.html 
+  // https://openlayers.org/en/latest/examples/select-hover-features.html
+  // https://openlayers.org/en/latest/examples/vector-tile-selection.html
+  // https://openlayers.org/workshop/en/vectortile/interact.html 
+  // https://stackoverflow.com/questions/38114655/openlayers-3-show-vector-labels-on-hover
+  
+  var map = new ol.Map({
+    target: 'map',
+    view: new ol.View({
+      center: ol.proj.transform([18.9085, 47.7889], 'EPSG:4326', 'EPSG:3857'),
+      zoom: 13
+    }),
+    layers: [
+      new ol.layer.Tile({
+        source: new ol.source.OSM(),
+      }),
+      map_data_layer
+    ]
+  });
+  
+
+    // HOVER & SELECTION:
+
+    var selection = {};
+
+    var map_selection_layer = new ol.layer.VectorTile({
+      map: map,
+      renderMode: 'vector',
+      source: map_data_layer.getSource(),
+      style: function (feature) {
+        if (feature.getId() in selection) {
+          return style_selected;
+        }
+      },
+    });
+
+
+    map.on(['click', 'pointermove'], function (event) {
+      map_data_layer.getFeatures(event.pixel).then(function (features) {
+        if (!features.length) {
+          selection = {};
+          map_selection_layer.changed();
+          return;
+        }
+        var feature = features[0];
+        if (!feature) {
+          return;
+        }
+        var fid = feature.getId();
+
+        selection = {};
+        // add selected feature to lookup
+        selection[fid] = feature;
+
+        map_selection_layer.changed();
+      });
+    });
+
+    // INFO PANEL:
+    
+    blankInfoContent = 'Move the cursor over a point to see its data...';
+    var info = document.getElementById('info');
+    info.innerText = blankInfoContent;
+
+    map.on(['click', 'pointermove'], function (event) {
+      var features = map.getFeaturesAtPixel(event.pixel);
+      if (features.length == 0) {
+        info.innerText = blankInfoContent;
+        info.style.opacity = .5;
+        return;
+      }
+      var properties = features[0].getProperties();
+      //info.innerText = JSON.stringify(properties, null, 2);
+      info.innerHTML = JSON.stringify(properties);
+/*        "ID (A): " + properties.A + "<br>" +
+        "<b>Sávok száma: " + properties.savok_szama + "</b><br>" +
+        "Photo path: " + properties.photo_fullpath + "<br>";
+*/
+      info.style.opacity = 1; 
+      console.log(info.innerHTML);
+    });
+
+  </script>
+</body>
+</html>
+
